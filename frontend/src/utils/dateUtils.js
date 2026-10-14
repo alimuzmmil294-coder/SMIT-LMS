@@ -11,7 +11,10 @@ export function formatDMY(dateInput, separator = "/") {
     // For ISO strings ending with T or Z, use UTC parts to avoid local timezone offset shifting
     const isISO = str.includes("T") || str.endsWith("Z");
     const day = String(isISO ? d.getUTCDate() : d.getDate()).padStart(2, "0");
-    const month = String((isISO ? d.getUTCMonth() : d.getMonth()) + 1).padStart(2, "0");
+    const month = String((isISO ? d.getUTCMonth() : d.getMonth()) + 1).padStart(
+      2,
+      "0",
+    );
     const year = isISO ? d.getUTCFullYear() : d.getFullYear();
     return `${day}${separator}${month}${separator}${year}`;
   }

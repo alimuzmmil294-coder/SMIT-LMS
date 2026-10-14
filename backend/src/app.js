@@ -19,8 +19,13 @@ const app = express();
 
 app.use(
   cors({
-    origin: "*",
-
+    origin: (origin, callback) => {
+      if (!origin) return callback(null, true);
+      if (corsOrigins.includes(origin) || corsOrigins.includes("*")) {
+        return callback(null, true);
+      }
+      return callback(null, true);
+    },
     credentials: true,
   }),
 );

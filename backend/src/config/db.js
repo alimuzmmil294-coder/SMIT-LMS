@@ -12,7 +12,9 @@ async function connectDB() {
     console.error("MongoDB error:", error.message);
   });
 
-  await mongoose.connect(mongoUri);
+  await mongoose.connect(mongoUri, {
+    serverSelectionTimeoutMS: 5000,
+  });
 }
 
 module.exports = connectDB;
