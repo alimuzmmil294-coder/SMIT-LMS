@@ -236,9 +236,17 @@ const teamSlice = createSlice({
         state.actionLoading = false;
         state.teamModalOpen = false;
         const updated = action.payload;
+        if (!updated) return;
+        const updatedId = updated._id || updated.id;
         state.teams = state.teams.map((t) =>
-          (t._id || t.id) === (updated._id || updated.id) ? updated : t
+          (t._id || t.id) === updatedId ? updated : t
         );
+        if (state.selectedTeam && (state.selectedTeam._id || state.selectedTeam.id) === updatedId) {
+          state.selectedTeam = updated;
+        }
+        if (state.managingTeam && (state.managingTeam._id || state.managingTeam.id) === updatedId) {
+          state.managingTeam = updated;
+        }
       })
       .addCase(updateTeamThunk.rejected, (state, action) => {
         state.actionLoading = false;
@@ -260,6 +268,81 @@ const teamSlice = createSlice({
         );
       })
       .addCase(deleteTeamThunk.rejected, (state, action) => {
+        state.actionLoading = false;
+        state.actionError = action.payload;
+      })
+
+      // changeLeaderThunk
+      .addCase(changeLeaderThunk.pending, (state) => {
+        state.actionLoading = true;
+        state.actionError = null;
+      })
+      .addCase(changeLeaderThunk.fulfilled, (state, action) => {
+        state.actionLoading = false;
+        const updated = action.payload;
+        if (!updated) return;
+        const updatedId = updated._id || updated.id;
+        state.teams = state.teams.map((t) =>
+          (t._id || t.id) === updatedId ? updated : t
+        );
+        if (state.managingTeam && (state.managingTeam._id || state.managingTeam.id) === updatedId) {
+          state.managingTeam = updated;
+        }
+        if (state.selectedTeam && (state.selectedTeam._id || state.selectedTeam.id) === updatedId) {
+          state.selectedTeam = updated;
+        }
+      })
+      .addCase(changeLeaderThunk.rejected, (state, action) => {
+        state.actionLoading = false;
+        state.actionError = action.payload;
+      })
+
+      // addMemberThunk
+      .addCase(addMemberThunk.pending, (state) => {
+        state.actionLoading = true;
+        state.actionError = null;
+      })
+      .addCase(addMemberThunk.fulfilled, (state, action) => {
+        state.actionLoading = false;
+        const updated = action.payload;
+        if (!updated) return;
+        const updatedId = updated._id || updated.id;
+        state.teams = state.teams.map((t) =>
+          (t._id || t.id) === updatedId ? updated : t
+        );
+        if (state.managingTeam && (state.managingTeam._id || state.managingTeam.id) === updatedId) {
+          state.managingTeam = updated;
+        }
+        if (state.selectedTeam && (state.selectedTeam._id || state.selectedTeam.id) === updatedId) {
+          state.selectedTeam = updated;
+        }
+      })
+      .addCase(addMemberThunk.rejected, (state, action) => {
+        state.actionLoading = false;
+        state.actionError = action.payload;
+      })
+
+      // removeMemberThunk
+      .addCase(removeMemberThunk.pending, (state) => {
+        state.actionLoading = true;
+        state.actionError = null;
+      })
+      .addCase(removeMemberThunk.fulfilled, (state, action) => {
+        state.actionLoading = false;
+        const updated = action.payload;
+        if (!updated) return;
+        const updatedId = updated._id || updated.id;
+        state.teams = state.teams.map((t) =>
+          (t._id || t.id) === updatedId ? updated : t
+        );
+        if (state.managingTeam && (state.managingTeam._id || state.managingTeam.id) === updatedId) {
+          state.managingTeam = updated;
+        }
+        if (state.selectedTeam && (state.selectedTeam._id || state.selectedTeam.id) === updatedId) {
+          state.selectedTeam = updated;
+        }
+      })
+      .addCase(removeMemberThunk.rejected, (state, action) => {
         state.actionLoading = false;
         state.actionError = action.payload;
       });

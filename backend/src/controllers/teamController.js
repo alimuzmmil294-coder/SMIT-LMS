@@ -4,14 +4,28 @@ const Project = require("../models/Project");
 const asyncHandler = require("../utils/asyncHandler");
 
 const listTeams = asyncHandler(async (req, res) => {
+  const { search } = req.query;
   const teams = await Team.find()
     .populate("project")
     .sort({ createdAt: -1 });
 
-  const withMembers = await Promise.all(
+  let withMembers = await Promise.all(
     teams.map(async (team) => {
       const members = await Student.find({ team: team._id }).select("rollNumber name course batch");
-      const leader = members[0] || null;
+      let leader = null;
+      if (team.leader) {
+        leader = members.find((m) => m._id.toString() === team.leader.toString()) || null;
+      }
+      if (!leader && team.leader) {
+        team.leader = members.length > 0 ? members[0]._id : null;
+        await team.save();
+        leader = members.length > 0 ? members[0] : null;
+      } else if (!leader && !team.leader && members.length > 0) {
+        leader = members[0];
+        team.leader = leader._id;
+        await team.save();
+      }
+
       return {
         ...team.toObject(),
         members,
@@ -21,6 +35,15 @@ const listTeams = asyncHandler(async (req, res) => {
       };
     })
   );
+
+  if (search && search.trim()) {
+    const q = search.trim().toLowerCase();
+    withMembers = withMembers.filter(
+      (t) =>
+        t.name?.toLowerCase().includes(q) ||
+        t.leaderName?.toLowerCase().includes(q)
+    );
+  }
 
   res.json({ success: true, data: withMembers });
 });
@@ -33,7 +56,19 @@ const getTeam = asyncHandler(async (req, res) => {
   }
 
   const members = await Student.find({ team: team._id }).sort({ name: 1 });
-  const leader = members[0] || null;
+  let leader = null;
+  if (team.leader) {
+    leader = members.find((m) => m._id.toString() === team.leader.toString()) || null;
+  }
+  if (!leader && team.leader) {
+    team.leader = members.length > 0 ? members[0]._id : null;
+    await team.save();
+    leader = members.length > 0 ? members[0] : null;
+  } else if (!leader && !team.leader && members.length > 0) {
+    leader = members[0];
+    team.leader = leader._id;
+    await team.save();
+  }
 
   res.json({
     success: true,
@@ -52,28 +87,43 @@ const getTeam = asyncHandler(async (req, res) => {
 });
 
 const createTeam = asyncHandler(async (req, res) => {
-  const { name, memberIds = [] } = req.body;
+  const { name, memberIds = [], leaderId } = req.body;
 
   if (!name || !name.trim()) {
     return res.status(400).json({ success: false, message: "Team name is required" });
   }
 
+  const validIds = Array.isArray(memberIds)
+    ? memberIds.filter((id) => typeof id === "string" && id.match(/^[0-9a-fA-F]{24}$/))
+    : [];
+
+  let assignedLeaderId = null;
+  if (leaderId && typeof leaderId === "string" && leaderId.match(/^[0-9a-fA-F]{24}$/) && validIds.includes(leaderId)) {
+    assignedLeaderId = leaderId;
+  } else if (validIds.length > 0) {
+    assignedLeaderId = validIds[0];
+  }
+
   const team = await Team.create({
-    name: name.trim()
+    name: name.trim(),
+    leader: assignedLeaderId
   });
 
-  if (Array.isArray(memberIds) && memberIds.length > 0) {
-    const validIds = memberIds.filter((id) => typeof id === "string" && id.match(/^[0-9a-fA-F]{24}$/));
-    if (validIds.length > 0) {
-      await Student.updateMany(
-        { _id: { $in: validIds } },
-        { team: team._id }
-      );
-    }
+  if (validIds.length > 0) {
+    await Student.updateMany(
+      { _id: { $in: validIds } },
+      { team: team._id }
+    );
   }
 
   const members = await Student.find({ team: team._id }).select("rollNumber name course batch");
-  const leader = members[0] || null;
+  let leader = null;
+  if (team.leader) {
+    leader = members.find((m) => m._id.toString() === team.leader.toString()) || null;
+  }
+  if (!leader && members.length > 0) {
+    leader = members[0];
+  }
 
   res.status(201).json({
     success: true,
@@ -88,11 +138,49 @@ const createTeam = asyncHandler(async (req, res) => {
 });
 
 const updateTeam = asyncHandler(async (req, res) => {
-  const { name, memberIds = [] } = req.body;
+  const { name, memberIds, leaderId } = req.body;
 
   const updates = {};
   if (name && name.trim()) {
     updates.name = name.trim();
+  }
+
+  const existingTeam = await Team.findById(req.params.id);
+  if (!existingTeam) {
+    return res.status(404).json({ success: false, message: "Team not found" });
+  }
+
+  let validIds = null;
+  if (Array.isArray(memberIds)) {
+    validIds = memberIds.filter((id) => typeof id === "string" && id.match(/^[0-9a-fA-F]{24}$/));
+    
+    // Unassign students removed from team
+    await Student.updateMany(
+      { team: existingTeam._id, _id: { $nin: validIds } },
+      { team: null }
+    );
+    
+    // Assign selected students to team
+    if (validIds.length > 0) {
+      await Student.updateMany(
+        { _id: { $in: validIds } },
+        { team: existingTeam._id }
+      );
+    }
+  }
+
+  // Handle leader updates
+  if (leaderId && typeof leaderId === "string" && leaderId.match(/^[0-9a-fA-F]{24}$/) && (!validIds || validIds.includes(leaderId))) {
+    updates.leader = leaderId;
+  } else if (validIds) {
+    const currentLeaderId = existingTeam.leader ? existingTeam.leader.toString() : null;
+    if (validIds.length > 0) {
+      if (!currentLeaderId || !validIds.includes(currentLeaderId)) {
+        updates.leader = validIds[0];
+      }
+    } else {
+      updates.leader = null;
+    }
   }
 
   const team = await Team.findByIdAndUpdate(
@@ -101,30 +189,14 @@ const updateTeam = asyncHandler(async (req, res) => {
     { new: true, runValidators: true }
   );
 
-  if (!team) {
-    return res.status(404).json({ success: false, message: "Team not found" });
-  }
-
-  if (Array.isArray(memberIds)) {
-    const validIds = memberIds.filter((id) => typeof id === "string" && id.match(/^[0-9a-fA-F]{24}$/));
-    
-    // Unassign students removed from team
-    await Student.updateMany(
-      { team: team._id, _id: { $nin: validIds } },
-      { team: null }
-    );
-    
-    // Assign selected students to team
-    if (validIds.length > 0) {
-      await Student.updateMany(
-        { _id: { $in: validIds } },
-        { team: team._id }
-      );
-    }
-  }
-
   const members = await Student.find({ team: team._id }).select("rollNumber name course batch");
-  const leader = members[0] || null;
+  let leader = null;
+  if (team.leader) {
+    leader = members.find((m) => m._id.toString() === team.leader.toString()) || null;
+  }
+  if (!leader && members.length > 0) {
+    leader = members[0];
+  }
 
   res.json({
     success: true,
@@ -234,9 +306,21 @@ const addMember = asyncHandler(async (req, res) => {
   student.team = teamId;
   await student.save();
 
+  // If team has no leader, assign this new member as leader
+  if (!team.leader) {
+    team.leader = student._id;
+    await team.save();
+  }
+
   // Fetch updated team data
   const members = await Student.find({ team: teamId }).select("rollNumber name course batch");
-  const leader = members[0] || null;
+  let leader = null;
+  if (team.leader) {
+    leader = members.find((m) => m._id.toString() === team.leader.toString()) || null;
+  }
+  if (!leader && members.length > 0) {
+    leader = members[0];
+  }
 
   res.json({
     success: true,
@@ -269,9 +353,22 @@ const removeMember = asyncHandler(async (req, res) => {
   student.team = null;
   await student.save();
 
+  // If removed student was the leader, reassign leader
+  if (team.leader && team.leader.toString() === studentId.toString()) {
+    const remainingMembers = await Student.find({ team: teamId });
+    team.leader = remainingMembers.length > 0 ? remainingMembers[0]._id : null;
+    await team.save();
+  }
+
   // Fetch updated team data
   const members = await Student.find({ team: teamId }).select("rollNumber name course batch");
-  const leader = members[0] || null;
+  let leader = null;
+  if (team.leader) {
+    leader = members.find((m) => m._id.toString() === team.leader.toString()) || null;
+  }
+  if (!leader && members.length > 0) {
+    leader = members[0];
+  }
 
   res.json({
     success: true,
@@ -311,11 +408,15 @@ const changeLeader = asyncHandler(async (req, res) => {
     });
   }
 
+  // Persist updated leader in the team document
+  team.leader = leader._id;
+  await team.save();
+
   // Get all members and reorder so leader is first
   const allMembers = await Student.find({ team: teamId }).select("rollNumber name course batch");
   const members = [
     leader,
-    ...allMembers.filter((m) => m._id.toString() !== leaderId)
+    ...allMembers.filter((m) => m._id.toString() !== leaderId.toString())
   ];
 
   res.json({

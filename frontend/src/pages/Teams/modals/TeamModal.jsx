@@ -5,7 +5,8 @@ import Select from "../../../components/ui/Select";
 import Button from "../../../components/ui/Button";
 import { Users } from "lucide-react";
 
-const getObjId = (item) => (typeof item === "object" ? item?._id || item?.id : item);
+const getObjId = (item) =>
+  item ? (typeof item === "object" ? String(item._id || item.id || "") : String(item)) : "";
 
 function TeamModal({
   isOpen,
@@ -36,15 +37,14 @@ function TeamModal({
         leaderId: existingLeaderId,
       });
     } else {
-      const initialMemberIds = students.length > 0 ? [getObjId(students[0])] : [];
       setFormData({
         name: "",
-        memberIds: initialMemberIds,
-        leaderId: initialMemberIds[0] || "",
+        memberIds: [],
+        leaderId: "",
       });
     }
     setErrors({});
-  }, [team, isOpen, students]);
+  }, [team, isOpen]);
 
   const handleMemberToggle = (studentId) => {
     setFormData((prev) => {
@@ -60,8 +60,10 @@ function TeamModal({
       let updatedLeaderId = prev.leaderId;
       if (isSelected && prev.leaderId === studentId) {
         updatedLeaderId = updatedMemberIds.length > 0 ? updatedMemberIds[0] : "";
-      } else if (!prev.leaderId && updatedMemberIds.length > 0) {
+      } else if ((!prev.leaderId || !updatedMemberIds.includes(prev.leaderId)) && updatedMemberIds.length > 0) {
         updatedLeaderId = updatedMemberIds[0];
+      } else if (updatedMemberIds.length === 0) {
+        updatedLeaderId = "";
       }
 
       return {
@@ -179,6 +181,10 @@ function TeamModal({
               students.map((student) => {
                 const sId = getObjId(student);
                 const isChecked = formData.memberIds.includes(sId);
+                const studentTeamId = getObjId(student.team);
+                const isCurrentTeam = team && studentTeamId === (team._id || team.id);
+                const inAnotherTeam = studentTeamId && !isCurrentTeam;
+
                 return (
                   <label
                     key={sId}
@@ -195,7 +201,12 @@ function TeamModal({
                         onChange={() => handleMemberToggle(sId)}
                         className="h-4 w-4 rounded border-border text-primary focus:ring-primary"
                       />
-                      <span>{student.name}</span>
+                      <span className="font-medium">{student.name}</span>
+                      {inAnotherTeam && (
+                        <span className="text-[10px] text-amber-600 bg-amber-500/10 px-1.5 py-0.5 rounded border border-amber-500/20 font-normal">
+                          (In: {typeof student.team === "object" ? student.team.name : "Other Team"})
+                        </span>
+                      )}
                     </div>
                     <span className="text-xs font-mono text-text-muted">
                       {student.rollNumber}

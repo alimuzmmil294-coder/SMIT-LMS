@@ -97,10 +97,14 @@ function TeamDetailModal({
               </p>
             ) : (
               members.map((member) => {
-                const isLeader = member.id === team.leaderId;
+                const memberId = String(member._id || member.id);
+                const currentLeaderId = String(
+                  team.leaderId?._id || team.leaderId || team.leader?._id || team.leader || ""
+                );
+                const isLeader = Boolean(currentLeaderId && memberId === currentLeaderId);
                 return (
                   <div
-                    key={member.id}
+                    key={memberId}
                     className="flex items-center justify-between p-3 sm:px-4"
                   >
                     <div className="flex items-center gap-3">

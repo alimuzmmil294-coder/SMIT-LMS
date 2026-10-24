@@ -3,7 +3,10 @@ import Modal from "../../components/ui/Modal";
 import Input from "../../components/ui/Input";
 import Select from "../../components/ui/Select";
 import Button from "../../components/ui/Button";
-import { UserCheck, Users } from "lucide-react";
+import { Users } from "lucide-react";
+
+const getObjId = (item) =>
+  item ? (typeof item === "object" ? String(item._id || item.id || "") : String(item)) : "";
 
 function TeamModal({
   isOpen,
@@ -26,22 +29,22 @@ function TeamModal({
 
   useEffect(() => {
     if (team) {
-      const existingMemberIds = (team.members || []).map((m) => m.id);
+      const existingMemberIds = (team.members || []).map(getObjId).filter(Boolean);
+      const existingLeaderId = getObjId(team.leaderId || team.leader) || existingMemberIds[0] || "";
       setFormData({
         name: team.name || "",
         memberIds: existingMemberIds,
-        leaderId: team.leaderId || existingMemberIds[0] || "",
+        leaderId: existingLeaderId,
       });
     } else {
-      const initialMemberIds = students.length > 0 ? [students[0].id] : [];
       setFormData({
         name: "",
-        memberIds: initialMemberIds,
-        leaderId: initialMemberIds[0] || "",
+        memberIds: [],
+        leaderId: "",
       });
     }
     setErrors({});
-  }, [team, isOpen, students]);
+  }, [team, isOpen]);
 
   const handleMemberToggle = (studentId) => {
     setFormData((prev) => {
@@ -54,12 +57,13 @@ function TeamModal({
         updatedMemberIds = [...prev.memberIds, studentId];
       }
 
-      // If removed member was currently chosen as leader, reassign leader
       let updatedLeaderId = prev.leaderId;
       if (isSelected && prev.leaderId === studentId) {
         updatedLeaderId = updatedMemberIds.length > 0 ? updatedMemberIds[0] : "";
-      } else if (!prev.leaderId && updatedMemberIds.length > 0) {
+      } else if ((!prev.leaderId || !updatedMemberIds.includes(prev.leaderId)) && updatedMemberIds.length > 0) {
         updatedLeaderId = updatedMemberIds[0];
+      } else if (updatedMemberIds.length === 0) {
+        updatedLeaderId = "";
       }
 
       return {
@@ -106,12 +110,12 @@ function TeamModal({
 
   // Filter student options for leader select to selected members
   const selectedStudentObjects = students.filter((s) =>
-    formData.memberIds.includes(s.id)
+    formData.memberIds.includes(getObjId(s))
   );
 
   const leaderOptions = selectedStudentObjects.map((s) => ({
-    value: s.id,
-    label: `${s.name} (${s.rollNumber})`,
+    value: getObjId(s),
+    label: `${s.name} (${s.rollNumber || "N/A"})`,
   }));
 
   const footer = (
@@ -172,10 +176,15 @@ function TeamModal({
               </p>
             ) : (
               students.map((student) => {
-                const isChecked = formData.memberIds.includes(student.id);
+                const sId = getObjId(student);
+                const isChecked = formData.memberIds.includes(sId);
+                const studentTeamId = getObjId(student.team);
+                const isCurrentTeam = team && studentTeamId === (team._id || team.id);
+                const inAnotherTeam = studentTeamId && !isCurrentTeam;
+
                 return (
                   <label
-                    key={student.id}
+                    key={sId}
                     className={`flex items-center justify-between rounded-md px-3 py-2 text-sm cursor-pointer transition ${
                       isChecked
                         ? "bg-primary/10 text-primary font-medium"
@@ -186,10 +195,15 @@ function TeamModal({
                       <input
                         type="checkbox"
                         checked={isChecked}
-                        onChange={() => handleMemberToggle(student.id)}
+                        onChange={() => handleMemberToggle(sId)}
                         className="h-4 w-4 rounded border-border text-primary focus:ring-primary"
                       />
-                      <span>{student.name}</span>
+                      <span className="font-medium">{student.name}</span>
+                      {inAnotherTeam && (
+                        <span className="text-[10px] text-amber-600 bg-amber-500/10 px-1.5 py-0.5 rounded border border-amber-500/20 font-normal">
+                          (In: {typeof student.team === "object" ? student.team.name : "Other Team"})
+                        </span>
+                      )}
                     </div>
                     <span className="text-xs font-mono text-text-muted">
                       {student.rollNumber}

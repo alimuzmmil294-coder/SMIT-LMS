@@ -8,6 +8,11 @@ const teamSchema = new mongoose.Schema(
       unique: true,
       trim: true
     },
+    leader: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Student",
+      default: null
+    },
     project: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Project",

@@ -21,11 +21,15 @@ function ManageMembersModal({
   // Handle both _id and id fields from MongoDB
   const teamId = team._id || team.id;
   const members = team.members || [];
-  const memberIds = members.map((m) => m._id || m.id);
+  const memberIds = members.map((m) => String(m._id || m.id));
+
+  const currentLeaderId = String(
+    team.leaderId?._id || team.leaderId || team.leader?._id || team.leader || ""
+  );
 
   // Available students not in current team
   const availableStudents = students.filter(
-    (student) => !memberIds.includes(student._id || student.id)
+    (student) => !memberIds.includes(String(student._id || student.id))
   );
 
   const [selectedStudentToAdd, setSelectedStudentToAdd] = useState("");
@@ -46,12 +50,12 @@ function ManageMembersModal({
   };
 
   const addStudentOptions = availableStudents.map((s) => ({
-    value: s._id || s.id,
+    value: String(s._id || s.id),
     label: `${s.name} (${s.rollNumber})`,
   }));
 
   const leaderStudentOptions = members.map((s) => ({
-    value: s._id || s.id,
+    value: String(s._id || s.id),
     label: `${s.name} (${s.rollNumber})`,
   }));
 
@@ -98,7 +102,7 @@ function ManageMembersModal({
                   id="change-leader-select"
                   label="Change Team Leader"
                   options={leaderStudentOptions}
-                  value={selectedLeaderToAssign || team.leaderId}
+                  value={selectedLeaderToAssign || currentLeaderId}
                   onChange={(e) => setSelectedLeaderToAssign(e.target.value)}
                   placeholder="Select new leader"
                 />
@@ -107,7 +111,7 @@ function ManageMembersModal({
                 variant="primary"
                 type="submit"
                 loading={loading}
-                disabled={!selectedLeaderToAssign || selectedLeaderToAssign === team.leaderId}
+                disabled={!selectedLeaderToAssign || String(selectedLeaderToAssign) === currentLeaderId}
               >
                 <ShieldCheck className="h-4 w-4" />
                 <span>Assign Leader</span>
@@ -165,8 +169,8 @@ function ManageMembersModal({
               </p>
             ) : (
               members.map((member) => {
-                const memberId = member._id || member.id;
-                const isLeader = memberId === (team.leaderId?._id || team.leaderId);
+                const memberId = String(member._id || member.id);
+                const isLeader = Boolean(currentLeaderId && memberId === currentLeaderId);
                 return (
                   <div
                     key={memberId}
