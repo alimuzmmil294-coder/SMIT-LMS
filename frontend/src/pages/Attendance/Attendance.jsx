@@ -84,25 +84,51 @@ function Attendance() {
     });
   }, [studentsForMarking, search]);
 
-  // Handle status change for a student - Save immediately to database
-  const handleStatusChange = async (studentId, status) => {
+  const CLASS_CHECKOUT_TIME = "01:30 PM";
+
+  const formatCurrentTime = () => {
+    return new Date().toLocaleTimeString("en-US", {
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: true,
+    });
+  };
+
+  // Handle status change for a student with dynamic timestamps
+  const handleMarkAttendance = async (studentId, status) => {
+    let checkIn = "--";
+    let checkOut = "--";
+
+    if (status === "Present") {
+      checkIn = formatCurrentTime();
+      checkOut = CLASS_CHECKOUT_TIME;
+    }
+
     // Optimistically update UI
     setAttendanceChanges((prev) => ({
       ...prev,
-      [studentId]: status,
+      [studentId]: {
+        status,
+        checkIn,
+        checkOut,
+      },
     }));
     setActionError("");
     setSuccessMessage("");
 
     try {
       // Save to database immediately
-      await dispatch(markAttendanceThunk({ 
-        studentId, 
-        status, 
-        date: new Date().toISOString() 
-      })).unwrap();
+      await dispatch(
+        markAttendanceThunk({
+          studentId,
+          status,
+          checkIn,
+          checkOut,
+          date: new Date().toISOString(),
+        })
+      ).unwrap();
 
-      // Remove from pending changes since it's saved
+      // Remove from pending changes since it's saved in state
       setAttendanceChanges((prev) => {
         const updated = { ...prev };
         delete updated[studentId];
@@ -110,16 +136,15 @@ function Attendance() {
       });
 
       setSuccessMessage(`Attendance marked as ${status} for student`);
-      
+
       // Clear success message after 2 seconds
       setTimeout(() => {
         setSuccessMessage("");
       }, 2000);
-
     } catch (err) {
       console.error("Mark attendance error:", err);
       setActionError(typeof err === "string" ? err : "Failed to mark attendance");
-      
+
       // Revert optimistic update on error
       setAttendanceChanges((prev) => {
         const updated = { ...prev };
@@ -129,11 +154,22 @@ function Attendance() {
     }
   };
 
-  // Get current status for a student (from changes or existing)
-  const getCurrentStatus = (student) => {
-    return attendanceChanges[student._id] !== undefined 
-      ? attendanceChanges[student._id] 
-      : student.attendanceStatus;
+  // Alias for backward compatibility
+  const handleStatusChange = handleMarkAttendance;
+
+  // Get current status and timestamps for a student
+  const getCurrentAttendance = (student) => {
+    if (attendanceChanges[student._id]) {
+      return attendanceChanges[student._id];
+    }
+    const status = student.attendanceStatus || null;
+    const isInactive = status === "Absent" || status === "Leave";
+
+    return {
+      status,
+      checkIn: isInactive ? "--" : (student.checkIn || (status === "Present" ? formatCurrentTime() : "--")),
+      checkOut: isInactive ? "--" : (student.checkOut || (status === "Present" ? CLASS_CHECKOUT_TIME : "--")),
+    };
   };
 
   const handleViewHistory = (student) => {
@@ -241,6 +277,12 @@ function Attendance() {
                       Batch
                     </th>
                     <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-text-muted">
+                      Check-In
+                    </th>
+                    <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-text-muted">
+                      Check-Out
+                    </th>
+                    <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-text-muted">
                       Attendance Status
                     </th>
                     <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-text-muted">
@@ -250,8 +292,10 @@ function Attendance() {
                 </thead>
                 <tbody>
                   {filteredStudents.map((student) => {
-                    const currentStatus = getCurrentStatus(student);
-                    
+                    const { status: currentStatus, checkIn: currentCheckIn, checkOut: currentCheckOut } =
+                      getCurrentAttendance(student);
+                    const isInactive = currentStatus === "Absent" || currentStatus === "Leave";
+
                     return (
                       <tr
                         key={student._id}
@@ -270,6 +314,20 @@ function Attendance() {
                         </td>
                         <td className="px-4 py-3 text-xs text-text-muted">
                           {student.batch}
+                        </td>
+                        <td className="px-4 py-3 text-xs text-text-muted font-mono font-medium">
+                          {isInactive || !currentCheckIn || currentCheckIn === "--" ? (
+                            <span className="text-text-muted/50 select-none">--</span>
+                          ) : (
+                            <span className="text-text">{currentCheckIn}</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-xs text-text-muted font-mono font-medium">
+                          {isInactive || !currentCheckOut || currentCheckOut === "--" ? (
+                            <span className="text-text-muted/50 select-none">--</span>
+                          ) : (
+                            <span className="text-text">{currentCheckOut}</span>
+                          )}
                         </td>
                         <td className="px-4 py-3">
                           {currentStatus ? (
@@ -294,7 +352,7 @@ function Attendance() {
                               <button
                                 key={status}
                                 type="button"
-                                onClick={() => handleStatusChange(student._id, status)}
+                                onClick={() => handleMarkAttendance(student._id, status)}
                                 className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
                                   currentStatus === status
                                     ? status === "Present"

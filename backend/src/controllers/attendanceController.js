@@ -49,7 +49,7 @@ const listAttendance = asyncHandler(async (req, res) => {
 });
 
 const markAttendance = asyncHandler(async (req, res) => {
-  const { rollNumber, studentId, date, status } = req.body;
+  const { rollNumber, studentId, date, status, checkIn: reqCheckIn, checkOut: reqCheckOut } = req.body;
 
   if (!["Present", "Absent", "Leave"].includes(status)) {
     return res.status(400).json({
@@ -95,10 +95,32 @@ const markAttendance = asyncHandler(async (req, res) => {
     return res.status(400).json({ success: false, message: "Invalid date" });
   }
 
+  // Dynamic timestamp logic:
+  // Present: current timestamp 'hh:mm A', check-out: '01:30 PM'
+  // Absent / Leave: check-in: '--', check-out: '--'
+  let checkIn = reqCheckIn;
+  let checkOut = reqCheckOut;
+
+  if (status === "Present") {
+    if (!checkIn || checkIn === "--") {
+      checkIn = new Date().toLocaleTimeString("en-US", {
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: true
+      });
+    }
+    if (!checkOut || checkOut === "--") {
+      checkOut = "01:30 PM";
+    }
+  } else {
+    checkIn = "--";
+    checkOut = "--";
+  }
+
   try {
     const record = await Attendance.findOneAndUpdate(
       { student: student._id, date: { $gte: range.start, $lt: range.end } },
-      { student: student._id, date: range.start, status },
+      { student: student._id, date: range.start, status, checkIn, checkOut },
       { returnDocument: 'after', upsert: true, runValidators: true, setDefaultsOnInsert: true }
     ).populate("student", "rollNumber name course batch team");
 
@@ -109,7 +131,7 @@ const markAttendance = asyncHandler(async (req, res) => {
       console.error("Duplicate key error on attendance mark - retrying update:", error);
       const fallbackRecord = await Attendance.findOneAndUpdate(
         { student: student._id, date: { $gte: range.start, $lt: range.end } },
-        { status },
+        { status, checkIn, checkOut },
         { new: true, runValidators: true }
       ).populate("student", "rollNumber name course batch team");
       
@@ -213,6 +235,8 @@ const getStudentsForAttendance = asyncHandler(async (req, res) => {
     if (!attendanceMap[sId]) {
       attendanceMap[sId] = {
         status: record.status,
+        checkIn: record.checkIn || null,
+        checkOut: record.checkOut || null,
         _id: record._id
       };
     }
@@ -227,7 +251,9 @@ const getStudentsForAttendance = asyncHandler(async (req, res) => {
     batch: student.batch,
     team: student.team,
     attendanceStatus: attendanceMap[student._id.toString()]?.status || null,
-    attendanceId: attendanceMap[student._id.toString()]?._id || null
+    attendanceId: attendanceMap[student._id.toString()]?._id || null,
+    checkIn: attendanceMap[student._id.toString()]?.checkIn || null,
+    checkOut: attendanceMap[student._id.toString()]?.checkOut || null
   }));
 
   res.json({ 

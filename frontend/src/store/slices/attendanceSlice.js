@@ -107,6 +107,8 @@ const updateStudentMarkingStatus = (students, record) => {
     ...students[index],
     attendanceStatus: record.status,
     attendanceId: record._id || record.id,
+    checkIn: record.checkIn,
+    checkOut: record.checkOut,
   };
 };
 
